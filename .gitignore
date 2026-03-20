@@ -1,0 +1,20 @@
+# Python cache/artifacts
+__pycache__/
+*.py[cod]
+*.so
+
+# Virtual environments
+.venv/
+venv/
+
+# Environment/secrets
+.env
+
+# Logs
+*.log
+logs/
+
+# OS/editor noise
+.DS_Store
+.idea/
+.vscode/
