@@ -4,6 +4,7 @@ import os
 import tempfile
 import textwrap
 import unittest
+from unittest.mock import patch
 
 from uptime_monitor.config import ConfigError, load_config
 
@@ -121,6 +122,55 @@ class TestConfig(unittest.TestCase):
             cfg = load_config(env_path)
             self.assertTrue(cfg.log_enable)
             self.assertEqual(cfg.log_file, "logs/app.log")
+
+    def test_web_defaults(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            env_path = os.path.join(tmpdir, ".env")
+            with open(env_path, "w", encoding="utf-8") as file:
+                file.write("DATABASE_URL=postgresql://user:pass@localhost:5432/uptime_monitor\n")
+            cfg = load_config(env_path)
+            self.assertEqual(cfg.web_bind_host, "0.0.0.0")
+            self.assertEqual(cfg.web_port, 10000)
+            self.assertEqual(cfg.health_path, "/healthz")
+
+    def test_web_port_uses_port_env_when_web_port_empty(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            env_path = os.path.join(tmpdir, ".env")
+            with open(env_path, "w", encoding="utf-8") as file:
+                file.write("DATABASE_URL=postgresql://user:pass@localhost:5432/uptime_monitor\n")
+            with patch.dict(os.environ, {"PORT": "12000"}, clear=False):
+                cfg = load_config(env_path)
+            self.assertEqual(cfg.web_port, 12000)
+
+    def test_invalid_web_port_range(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            env_path = os.path.join(tmpdir, ".env")
+            with open(env_path, "w", encoding="utf-8") as file:
+                file.write(
+                    textwrap.dedent(
+                        """\
+                        DATABASE_URL=postgresql://user:pass@localhost:5432/uptime_monitor
+                        WEB_PORT=70000
+                        """
+                    )
+                )
+            with self.assertRaises(ConfigError):
+                load_config(env_path)
+
+    def test_invalid_health_path(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            env_path = os.path.join(tmpdir, ".env")
+            with open(env_path, "w", encoding="utf-8") as file:
+                file.write(
+                    textwrap.dedent(
+                        """\
+                        DATABASE_URL=postgresql://user:pass@localhost:5432/uptime_monitor
+                        HEALTH_PATH=healthz
+                        """
+                    )
+                )
+            with self.assertRaises(ConfigError):
+                load_config(env_path)
 
 
 if __name__ == "__main__":

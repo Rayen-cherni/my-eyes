@@ -16,6 +16,7 @@ It defines how to run, modify, validate, and safely extend the uptime monitor pr
   - store checks in PostgreSQL
   - support ICMP with TCP/HTTP fallbacks
   - provide CLI for target management and execution modes
+  - bind a health endpoint in `run` and `run-once` for Web-Service platforms
 - Environment setup:
   - copy `.env.example` to `.env`
   - fill runtime constants and DB/schema mapping keys
@@ -39,6 +40,8 @@ It defines how to run, modify, validate, and safely extend the uptime monitor pr
   - PostgreSQL implementation with dynamic schema identifiers from env.
 - `src/uptime_monitor/scheduler.py`
   - continuous monitoring loop.
+- `src/uptime_monitor/web_health.py`
+  - lightweight HTTP health endpoint binding for Render-style port detection.
 - `tests/`
   - unit/integration-style coverage for config, validation, checker behavior, and storage.
 
@@ -79,11 +82,16 @@ When adding a new concern, keep boundaries clear: CLI wiring in `cli.py`, busine
 - Optional file logging contract:
   - set `LOG_ENABLE=true`
   - set `LOG_FILE=<path>` (required when enabled)
+- Web-service health binding contract:
+  - `WEB_BIND_HOST=0.0.0.0`
+  - `WEB_PORT` optional; falls back to `PORT`, then `10000`
+  - `HEALTH_PATH` default `/healthz`
 - Typical debugging approach:
   1. validate config parse errors first
   2. verify target classification/validation
   3. verify probe method failures (icmp/tcp/http details)
   4. verify DB writes and schema mapping keys
+  5. verify `GET /healthz` returns `200` during `run`/`run-once`
 
 ## Coding Standards
 

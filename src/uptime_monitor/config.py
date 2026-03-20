@@ -49,6 +49,9 @@ class AppConfig:
     log_level: str
     log_enable: bool
     log_file: str
+    web_bind_host: str
+    web_port: int
+    health_path: str
     timeout_seconds: float
     retry_count: int
     retry_backoff_base_seconds: float
@@ -196,6 +199,24 @@ def load_config(dotenv_path: str | Path = ".env") -> AppConfig:
     if not http_path.startswith("/"):
         http_path = f"/{http_path}"
 
+    web_bind_host = _get_str(env, "WEB_BIND_HOST", "0.0.0.0")
+    web_port_raw = _get_str(env, "WEB_PORT", "")
+    if web_port_raw:
+        try:
+            web_port = int(web_port_raw)
+        except ValueError as exc:
+            raise ConfigError(f"WEB_PORT must be an integer, got {web_port_raw!r}") from exc
+    else:
+        port_raw = _get_str(env, "PORT", "10000")
+        try:
+            web_port = int(port_raw)
+        except ValueError as exc:
+            raise ConfigError(f"PORT must be an integer, got {port_raw!r}") from exc
+
+    health_path = _get_str(env, "HEALTH_PATH", "/healthz")
+    if not health_path.startswith("/"):
+        raise ConfigError("HEALTH_PATH must start with '/'")
+
     # Build PostgreSQL DATABASE_URL from individual parameters if not explicitly provided.
     database_url = _get_str(env, "DATABASE_URL", "")
     if not database_url:
@@ -220,6 +241,9 @@ def load_config(dotenv_path: str | Path = ".env") -> AppConfig:
         log_level=_get_str(env, "LOG_LEVEL", "INFO").upper(),
         log_enable=_get_bool(env, "LOG_ENABLE", False),
         log_file=_get_str(env, "LOG_FILE", ""),
+        web_bind_host=web_bind_host,
+        web_port=web_port,
+        health_path=health_path,
         timeout_seconds=_get_float(env, "TIMEOUT_SECONDS", 5.0),
         retry_count=_get_int(env, "RETRY_COUNT", 3),
         retry_backoff_base_seconds=_get_float(env, "RETRY_BACKOFF_BASE_SECONDS", 0.5),
@@ -256,6 +280,8 @@ def load_config(dotenv_path: str | Path = ".env") -> AppConfig:
         raise ConfigError("SUMMARY_LIMIT must be >= 1")
     if config.log_enable and not config.log_file:
         raise ConfigError("LOG_FILE is required when LOG_ENABLE=true")
+    if config.web_port < 1 or config.web_port > 65535:
+        raise ConfigError("WEB_PORT/PORT must be between 1 and 65535")
     if not (
         config.enable_icmp
         or config.enable_tcp_fallback

@@ -7,6 +7,7 @@ A production-oriented uptime monitor for multiple targets (domain, IPv4, IPv6) w
 - CLI target management and scheduler loop
 - env-driven table/column mapping for schema compatibility
 - automatic PostgreSQL database creation if target DB does not exist
+- Render-compatible health endpoint and port binding in `run` and `run-once`
 
 ## Project Structure
 
@@ -32,13 +33,16 @@ A production-oriented uptime monitor for multiple targets (domain, IPv4, IPv6) w
 │       ├── scheduler.py
 │       ├── service.py
 │       ├── validation.py
+│       ├── web_health.py
 │       └── storage/
 │           ├── __init__.py
 │           ├── base.py
 │           └── postgres.py
 └── tests/
+    ├── test_cli_health_server.py
     ├── test_checkers.py
     ├── test_config.py
+    ├── test_web_health.py
     └── test_validation.py
 ```
 
@@ -93,6 +97,11 @@ python main.py run-once
 python main.py run
 ```
 
+Render note:
+- `run` and `run-once` both open an HTTP health endpoint for platform port detection.
+- Port resolution order is `WEB_PORT` -> `PORT` -> `10000`.
+- Health endpoint default path is `/healthz`.
+
 Alternative module mode:
 
 ```bash
@@ -129,8 +138,53 @@ Invalid entries are skipped with warnings.
 - To enable file logging, set:
   - `LOG_ENABLE=true`
   - `LOG_FILE=logs/uptime-monitor.log` (required when enabled)
+- Web service binding and health endpoint settings:
+  - `WEB_BIND_HOST=0.0.0.0`
+  - `WEB_PORT=` (optional; falls back to `PORT`, then `10000`)
+  - `HEALTH_PATH=/healthz`
 - Startup fails fast on invalid config.
 - Per-target check failures are non-fatal and still stored as `down` events with error details.
+
+## Render Deployment Notes
+
+- Service type: Web Service.
+- Start command: `python3 main.py run`.
+- The app binds to `0.0.0.0` and the configured/exposed port (`WEB_PORT`/`PORT`/`10000`).
+- Health endpoint: `GET /healthz` (override with `HEALTH_PATH`).
+- `render.yaml` is optional; dashboard configuration is enough when using `run`.
+
+## Check Workflow (ICMP → TCP → HTTP)
+
+The uptime monitor uses a multi-method availability check chain with intelligent fallback:
+
+1. **ICMP (Ping)**
+   - First method attempted for all targets
+   - Fastest and most lightweight
+   - Tests basic network reachability
+   - Fails if firewall blocks ICMP or target is offline
+
+2. **TCP (Port Connection)**
+   - Triggered if ICMP fails or times out
+   - Attempts to connect to port 443 (HTTPS) or 80 (HTTP)
+   - Confirms the host is reachable even if ICMP is blocked
+   - Suitable for hosts in restricted environments
+
+3. **HTTP/HTTPS (Application Level)**
+   - Triggered if TCP connection fails
+   - Sends HTTP GET request to validate web service availability
+   - Confirms the application is responding, not just the network
+   - Final fallback for comprehensive availability verification
+
+**Retry and Timeout Behavior:**
+- Each method respects configured retry count and timeout thresholds (configurable in `.env`)
+- If any method succeeds, the target is marked as `up`
+- If all methods fail, the target is marked as `down` with error details
+- Failed checks are persisted to the database for audit and historical analysis
+
+**When Each Method Works Best:**
+- **ICMP**: Reliable for hosts with ICMP enabled; fastest check
+- **TCP**: Works when ICMP is blocked but network is reachable
+- **HTTP**: Ensures application/service is truly operational
 
 ## Run Tests
 

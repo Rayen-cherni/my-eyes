@@ -11,6 +11,7 @@ from uptime_monitor.logging_utils import configure_logging
 from uptime_monitor.scheduler import run_forever
 from uptime_monitor.service import MonitorService
 from uptime_monitor.storage import build_storage
+from uptime_monitor.web_health import WebHealthServer
 
 LOGGER = logging.getLogger(__name__)
 
@@ -70,6 +71,7 @@ def main(argv: list[str] | None = None) -> int:
         return 2
 
     configure_logging(config.log_level, config.log_enable, config.log_file)
+    health_server: WebHealthServer | None = None
 
     try:
         storage = build_storage(config)
@@ -113,11 +115,27 @@ def main(argv: list[str] | None = None) -> int:
             return 0
 
         if args.command == "run-once":
+            health_server = WebHealthServer(config.web_bind_host, config.web_port, config.health_path)
+            health_server.start()
+            LOGGER.info(
+                "Health server started on %s:%s%s",
+                config.web_bind_host,
+                health_server.bound_port,
+                config.health_path,
+            )
             summary = service.run_check_cycle()
             _print_run_summary(summary)
             return 0
 
         if args.command == "run":
+            health_server = WebHealthServer(config.web_bind_host, config.web_port, config.health_path)
+            health_server.start()
+            LOGGER.info(
+                "Health server started on %s:%s%s",
+                config.web_bind_host,
+                health_server.bound_port,
+                config.health_path,
+            )
             try:
                 run_forever(service, config.check_interval_minutes)
             except KeyboardInterrupt:
@@ -130,6 +148,10 @@ def main(argv: list[str] | None = None) -> int:
         LOGGER.exception("Unhandled command failure")
         print(f"Command failed: {exc}", file=sys.stderr)
         return 5
+    finally:
+        if health_server is not None:
+            health_server.stop()
+            LOGGER.info("Health server stopped")
 
     parser.print_help()
     return 1
