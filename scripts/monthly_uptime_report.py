@@ -14,7 +14,7 @@ from email.mime.multipart import MIMEMultipart
 from email.mime.text import MIMEText
 from typing import Callable
 from urllib.error import HTTPError, URLError
-from urllib.parse import urlencode
+from urllib.parse import urlencode, urljoin
 from urllib.request import Request, urlopen
 
 
@@ -104,11 +104,7 @@ def _require_env(name: str) -> str:
     return value
 
 
-def _api_get(base_url: str, token: str, path: str, params: dict[str, str | int], timeout: int) -> dict:
-    query = urlencode(params)
-    url = f"{base_url.rstrip('/')}{path}"
-    if query:
-        url = f"{url}?{query}"
+def _api_get_url(token: str, url: str, timeout: int) -> dict:
     request = Request(
         url,
         headers={
@@ -127,6 +123,14 @@ def _api_get(base_url: str, token: str, path: str, params: dict[str, str | int],
         raise RuntimeError(f"UptimeRobot API HTTP {exc.code} for {url}: {details}") from exc
     except URLError as exc:
         raise RuntimeError(f"UptimeRobot API request failed for {url}: {exc}") from exc
+
+
+def _api_get(base_url: str, token: str, path: str, params: dict[str, str | int], timeout: int) -> dict:
+    query = urlencode(params)
+    url = f"{base_url.rstrip('/')}{path}"
+    if query:
+        url = f"{url}?{query}"
+    return _api_get_url(token, url, timeout)
 
 
 def collect_paginated(
@@ -149,13 +153,7 @@ def collect_paginated(
 
 
 def fetch_monitors(base_url: str, token: str, timeout: int = DEFAULT_TIMEOUT_SECONDS) -> list[dict]:
-    def _fetch(cursor: str | int | None) -> dict:
-        params: dict[str, str | int] = {"limit": DEFAULT_PAGE_SIZE}
-        if cursor is not None:
-            params["cursor"] = cursor
-        return _api_get(base_url, token, "/monitors", params, timeout)
-
-    return collect_paginated(_fetch, "monitors")
+    return fetch_next_link_pages(base_url, token, "/monitors", timeout=timeout)
 
 
 def fetch_incidents(
@@ -165,15 +163,38 @@ def fetch_incidents(
     end_utc: datetime,
     timeout: int = DEFAULT_TIMEOUT_SECONDS,
 ) -> list[dict]:
-    time_range = f"{start_utc.isoformat().replace('+00:00', 'Z')}/{end_utc.isoformat().replace('+00:00', 'Z')}"
+    all_incidents = fetch_next_link_pages(base_url, token, "/incidents", timeout=timeout)
+    filtered: list[dict] = []
+    for incident in all_incidents:
+        started_at_raw = incident.get("startedAt")
+        if not started_at_raw:
+            continue
+        try:
+            started_at = datetime.fromisoformat(str(started_at_raw).replace("Z", "+00:00"))
+        except ValueError:
+            continue
+        started_at_utc = started_at.astimezone(timezone.utc)
+        if start_utc <= started_at_utc < end_utc:
+            filtered.append(incident)
+    return filtered
 
-    def _fetch(cursor: str | int | None) -> dict:
-        params: dict[str, str | int] = {"limit": DEFAULT_PAGE_SIZE, "timeRange": time_range}
-        if cursor is not None:
-            params["cursor"] = cursor
-        return _api_get(base_url, token, "/incidents", params, timeout)
 
-    return collect_paginated(_fetch, "incidents")
+def fetch_next_link_pages(
+    base_url: str,
+    token: str,
+    path: str,
+    timeout: int = DEFAULT_TIMEOUT_SECONDS,
+) -> list[dict]:
+    items: list[dict] = []
+    next_url = f"{base_url.rstrip('/')}{path}"
+    while next_url:
+        response = _api_get_url(token, next_url, timeout)
+        items.extend(response.get("data", []))
+        raw_next_link = response.get("nextLink")
+        if not raw_next_link:
+            break
+        next_url = urljoin(f"{base_url.rstrip('/')}/", str(raw_next_link))
+    return items
 
 
 def _normalize_status(raw_status: str | None) -> str:
@@ -195,7 +216,11 @@ def compute_report(
         monitor_id = int(monitor.get("id"))
         aggregated[monitor_id] = {
             "monitor_id": monitor_id,
-            "name": str(monitor.get("name", f"Monitor {monitor_id}")),
+            "name": str(
+                monitor.get("friendlyName")
+                or monitor.get("name")
+                or f"Monitor {monitor_id}"
+            ),
             "url": str(monitor.get("url", "")),
             "status": _normalize_status(monitor.get("status")),
             "incident_count": 0,
@@ -204,11 +229,20 @@ def compute_report(
         }
 
     for incident in incidents:
-        monitor_id = int(incident.get("monitorId") or incident.get("monitor_id"))
+        monitor_info = incident.get("monitor") or {}
+        monitor_id = int(
+            incident.get("monitorId")
+            or incident.get("monitor_id")
+            or monitor_info.get("id")
+        )
         if monitor_id not in aggregated:
             aggregated[monitor_id] = {
                 "monitor_id": monitor_id,
-                "name": str(incident.get("monitorName", f"Monitor {monitor_id}")),
+                "name": str(
+                    incident.get("monitorName")
+                    or monitor_info.get("friendlyName")
+                    or f"Monitor {monitor_id}"
+                ),
                 "url": "",
                 "status": "UNKNOWN",
                 "incident_count": 0,
@@ -218,8 +252,14 @@ def compute_report(
         row = aggregated[monitor_id]
         row["incident_count"] += 1
         incident_type = str(incident.get("type", "")).strip().lower()
+        raw_duration = incident.get("duration")
+        duration_seconds = (
+            int(raw_duration)
+            if isinstance(raw_duration, (int, float))
+            else parse_duration_seconds(str(raw_duration))
+        )
         if incident_type == "downtime":
-            row["downtime_seconds"] += parse_duration_seconds(incident.get("duration"))
+            row["downtime_seconds"] += max(0, duration_seconds)
         elif incident_type == "slow response":
             row["slow_response_incident_count"] += 1
 

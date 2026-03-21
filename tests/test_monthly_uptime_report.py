@@ -1,5 +1,6 @@
 import unittest
 from datetime import datetime, timezone
+from unittest.mock import patch
 
 from scripts import monthly_uptime_report as report
 
@@ -35,6 +36,34 @@ class TestMonthlyUptimeReport(unittest.TestCase):
 
         merged = report.collect_paginated(fetch_page, "items")
         self.assertEqual(merged, [{"id": 1}, {"id": 2}])
+
+    def test_fetch_next_link_pages(self):
+        responses = iter(
+            [
+                {"data": [{"id": 1}], "nextLink": "/v3/monitors?cursor=abc"},
+                {"data": [{"id": 2}], "nextLink": None},
+            ]
+        )
+
+        def fake_get_url(token, url, timeout):
+            _ = token, url, timeout
+            return next(responses)
+
+        with patch.object(report, "_api_get_url", side_effect=fake_get_url):
+            items = report.fetch_next_link_pages("https://api.uptimerobot.com/v3", "t", "/monitors")
+        self.assertEqual(items, [{"id": 1}, {"id": 2}])
+
+    def test_fetch_incidents_filters_by_window(self):
+        period_start = datetime(2026, 2, 1, 0, 0, tzinfo=timezone.utc)
+        period_end = datetime(2026, 3, 1, 0, 0, tzinfo=timezone.utc)
+        all_items = [
+            {"id": 1, "startedAt": "2026-02-10T10:00:00Z"},
+            {"id": 2, "startedAt": "2026-03-10T10:00:00Z"},
+        ]
+
+        with patch.object(report, "fetch_next_link_pages", return_value=all_items):
+            incidents = report.fetch_incidents("https://api.uptimerobot.com/v3", "t", period_start, period_end)
+        self.assertEqual([item["id"] for item in incidents], [1])
 
     def test_compute_report_downtime_only_policy(self):
         period_start = datetime(2026, 3, 1, 0, 0, tzinfo=timezone.utc)
