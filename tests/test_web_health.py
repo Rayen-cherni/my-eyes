@@ -2,6 +2,8 @@ from __future__ import annotations
 
 import json
 import unittest
+from io import BytesIO
+from unittest.mock import Mock
 from unittest.mock import MagicMock, patch
 
 from uptime_monitor.web_health import WebHealthServer, evaluate_health_request
@@ -37,6 +39,34 @@ class TestWebHealthServer(unittest.TestCase):
         mocked_server.shutdown.assert_called_once()
         mocked_server.server_close.assert_called_once()
         mocked_thread_instance.join.assert_called_once()
+
+    @patch("uptime_monitor.web_health.threading.Thread")
+    @patch("uptime_monitor.web_health.ThreadingHTTPServer")
+    def test_head_health_semantics(self, mocked_http_server: MagicMock, mocked_thread: MagicMock) -> None:
+        mocked_server = MagicMock()
+        mocked_server.server_address = ("127.0.0.1", 10000)
+        mocked_http_server.return_value = mocked_server
+        mocked_thread.return_value = MagicMock()
+
+        server = WebHealthServer("127.0.0.1", 10000, "/healthz")
+        server.start()
+        handler_cls = mocked_http_server.call_args[0][1]
+
+        head_self = Mock()
+        head_self.path = "/healthz"
+        head_self.wfile = BytesIO()
+        handler_cls._handle_health_request(head_self, include_body=False)
+        head_self.send_response.assert_called_once_with(200)
+        self.assertEqual(head_self.wfile.getvalue(), b"")
+
+        not_found_self = Mock()
+        not_found_self.path = "/missing"
+        not_found_self.wfile = BytesIO()
+        handler_cls._handle_health_request(not_found_self, include_body=False)
+        not_found_self.send_response.assert_called_once_with(404)
+        not_found_self.send_header.assert_called_with("Content-Length", "0")
+
+        server.stop()
 
 
 if __name__ == "__main__":
