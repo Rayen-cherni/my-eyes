@@ -1,0 +1,35 @@
+name: Monthly Uptime Report
+
+on:
+  schedule:
+    - cron: "0 8 1 * *"
+  workflow_dispatch:
+
+jobs:
+  monthly-uptime-report:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Syntax check
+        run: python -m py_compile scripts/monthly_uptime_report.py
+
+      - name: Run monthly report unit tests
+        run: PYTHONPATH=src python -m unittest tests.test_monthly_uptime_report -v
+
+      - name: Send monthly report email
+        env:
+          UPTIMEROBOT_API_TOKEN: ${{ secrets.UPTIMEROBOT_API_TOKEN }}
+          OVH_SMTP_HOST: ${{ secrets.OVH_SMTP_HOST }}
+          OVH_SMTP_PORT: ${{ secrets.OVH_SMTP_PORT }}
+          OVH_SMTP_USER: ${{ secrets.OVH_SMTP_USER }}
+          OVH_SMTP_PASS: ${{ secrets.OVH_SMTP_PASS }}
+          SMTP_FROM: ${{ secrets.SMTP_FROM }}
+          REPORT_TO: ${{ secrets.REPORT_TO }}
+        run: python scripts/monthly_uptime_report.py

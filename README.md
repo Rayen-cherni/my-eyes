@@ -192,6 +192,36 @@ The uptime monitor uses a multi-method availability check chain with intelligent
 PYTHONPATH=src python -m unittest discover -s tests -v
 ```
 
+## Monthly Uptime Email Report (GitHub Actions)
+
+This repository includes a hosted monthly reporting workflow at:
+
+- `.github/workflows/monthly-uptime-report.yml`
+- `scripts/monthly_uptime_report.py`
+
+Behavior:
+- Runs on the first day of each month at `08:00 UTC`.
+- Also supports manual runs via `workflow_dispatch`.
+- Uses UptimeRobot REST API v3 monitor + incident data for the previous calendar month.
+- Sends an email report through OVH SMTP.
+
+Create these GitHub **Actions Secrets**:
+- `UPTIMEROBOT_API_TOKEN`: dedicated read-only UptimeRobot REST token.
+- `OVH_SMTP_HOST`: SMTP host (for example `ssl0.ovh.net`).
+- `OVH_SMTP_PORT`: SMTP port (usually `587` for STARTTLS).
+- `OVH_SMTP_USER`: SMTP username.
+- `OVH_SMTP_PASS`: SMTP password.
+- `SMTP_FROM`: sender email address.
+- `REPORT_TO`: comma-separated recipient emails.
+
+Optional environment values (defaults are set in script):
+- `UPTIMEROBOT_API_BASE` (default: `https://api.uptimerobot.com/v3`)
+- `UPTIMEROBOT_TIMEOUT_SECONDS` (default: `30`)
+
+Report policy:
+- Uptime percentage is computed from `Downtime` incidents only.
+- `Slow Response` incidents are reported separately and excluded from downtime seconds.
+
 ## Design Choices (Brief)
 
 - Adapter-based storage boundary: keeps backend-specific logic isolated to dedicated adapters.
