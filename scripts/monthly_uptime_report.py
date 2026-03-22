@@ -6,6 +6,7 @@ from __future__ import annotations
 import html
 import json
 import os
+import sys
 import smtplib
 import ssl
 from dataclasses import dataclass
@@ -34,6 +35,39 @@ class MonitorReport:
     downtime_seconds: int
     uptime_seconds: int
     uptime_percent: float
+
+
+def _warn(message: str) -> None:
+    print(f"[monthly-uptime-report] {message}", file=sys.stderr)
+
+
+def _parse_datetime_utc(value: object) -> datetime | None:
+    if not value:
+        return None
+    try:
+        parsed = datetime.fromisoformat(str(value).replace("Z", "+00:00"))
+    except ValueError:
+        return None
+    return parsed.astimezone(timezone.utc)
+
+
+def _parse_monitor_id(raw_value: object) -> int | None:
+    if raw_value is None:
+        return None
+    try:
+        if isinstance(raw_value, str) and not raw_value.strip():
+            return None
+        return int(raw_value)
+    except (TypeError, ValueError):
+        return None
+
+
+def _incident_end_utc(incident: dict, default_end_utc: datetime) -> datetime:
+    for key in ("resolvedAt", "endedAt", "ended_at", "resolved_at"):
+        parsed = _parse_datetime_utc(incident.get(key))
+        if parsed:
+            return parsed
+    return default_end_utc
 
 
 def utc_previous_month_window(reference_utc: datetime | None = None) -> tuple[datetime, datetime]:
@@ -166,15 +200,11 @@ def fetch_incidents(
     all_incidents = fetch_next_link_pages(base_url, token, "/incidents", timeout=timeout)
     filtered: list[dict] = []
     for incident in all_incidents:
-        started_at_raw = incident.get("startedAt")
-        if not started_at_raw:
+        started_at_utc = _parse_datetime_utc(incident.get("startedAt"))
+        if started_at_utc is None:
             continue
-        try:
-            started_at = datetime.fromisoformat(str(started_at_raw).replace("Z", "+00:00"))
-        except ValueError:
-            continue
-        started_at_utc = started_at.astimezone(timezone.utc)
-        if start_utc <= started_at_utc < end_utc:
+        incident_end_utc = _incident_end_utc(incident, end_utc)
+        if started_at_utc < end_utc and incident_end_utc > start_utc:
             filtered.append(incident)
     return filtered
 
@@ -213,7 +243,10 @@ def compute_report(
 
     aggregated: dict[int, dict] = {}
     for monitor in monitors:
-        monitor_id = int(monitor.get("id"))
+        monitor_id = _parse_monitor_id(monitor.get("id"))
+        if monitor_id is None:
+            _warn(f"Skipping monitor with invalid id: {monitor.get('id')!r}")
+            continue
         aggregated[monitor_id] = {
             "monitor_id": monitor_id,
             "name": str(
@@ -230,11 +263,17 @@ def compute_report(
 
     for incident in incidents:
         monitor_info = incident.get("monitor") or {}
-        monitor_id = int(
+        monitor_id = _parse_monitor_id(
             incident.get("monitorId")
             or incident.get("monitor_id")
             or monitor_info.get("id")
         )
+        if monitor_id is None:
+            _warn(
+                "Skipping incident with invalid monitor id: "
+                f"{incident.get('monitorId') or incident.get('monitor_id') or monitor_info.get('id')!r}"
+            )
+            continue
         if monitor_id not in aggregated:
             aggregated[monitor_id] = {
                 "monitor_id": monitor_id,
@@ -252,14 +291,17 @@ def compute_report(
         row = aggregated[monitor_id]
         row["incident_count"] += 1
         incident_type = str(incident.get("type", "")).strip().lower()
-        raw_duration = incident.get("duration")
-        duration_seconds = (
-            int(raw_duration)
-            if isinstance(raw_duration, (int, float))
-            else parse_duration_seconds(str(raw_duration))
-        )
+        started_at_utc = _parse_datetime_utc(incident.get("startedAt"))
+        incident_end_utc = _incident_end_utc(incident, period_end_utc)
         if incident_type == "downtime":
-            row["downtime_seconds"] += max(0, duration_seconds)
+            if started_at_utc is None:
+                _warn(f"Skipping downtime incident without valid startedAt for monitor {monitor_id}")
+                continue
+            effective_start = max(started_at_utc, period_start_utc)
+            effective_end = min(incident_end_utc, period_end_utc)
+            overlap_seconds = int((effective_end - effective_start).total_seconds())
+            if overlap_seconds > 0:
+                row["downtime_seconds"] += overlap_seconds
         elif incident_type == "slow response":
             row["slow_response_incident_count"] += 1
 

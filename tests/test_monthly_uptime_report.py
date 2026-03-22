@@ -57,13 +57,15 @@ class TestMonthlyUptimeReport(unittest.TestCase):
         period_start = datetime(2026, 2, 1, 0, 0, tzinfo=timezone.utc)
         period_end = datetime(2026, 3, 1, 0, 0, tzinfo=timezone.utc)
         all_items = [
-            {"id": 1, "startedAt": "2026-02-10T10:00:00Z"},
-            {"id": 2, "startedAt": "2026-03-10T10:00:00Z"},
+            {"id": 1, "startedAt": "2026-02-10T10:00:00Z", "resolvedAt": "2026-02-10T11:00:00Z"},
+            {"id": 2, "startedAt": "2026-03-10T10:00:00Z", "resolvedAt": "2026-03-10T11:00:00Z"},
+            {"id": 3, "startedAt": "2026-01-31T23:30:00Z", "resolvedAt": "2026-02-01T00:30:00Z"},
+            {"id": 4, "startedAt": "2026-01-15T10:00:00Z", "resolvedAt": "2026-01-15T11:00:00Z"},
         ]
 
         with patch.object(report, "fetch_next_link_pages", return_value=all_items):
             incidents = report.fetch_incidents("https://api.uptimerobot.com/v3", "t", period_start, period_end)
-        self.assertEqual([item["id"] for item in incidents], [1])
+        self.assertEqual([item["id"] for item in incidents], [1, 3])
 
     def test_compute_report_downtime_only_policy(self):
         period_start = datetime(2026, 3, 1, 0, 0, tzinfo=timezone.utc)
@@ -73,9 +75,19 @@ class TestMonthlyUptimeReport(unittest.TestCase):
             {"id": 2, "name": "B", "url": "https://b.test", "status": "UP"},
         ]
         incidents = [
-            {"monitorId": 1, "type": "Downtime", "duration": "1h 0m 0s"},
+            {
+                "monitorId": 1,
+                "type": "Downtime",
+                "startedAt": "2026-03-01T10:00:00Z",
+                "resolvedAt": "2026-03-01T11:00:00Z",
+            },
             {"monitorId": 1, "type": "Slow Response", "duration": "5m"},
-            {"monitorId": 2, "type": "Downtime", "duration": "31d"},
+            {
+                "monitorId": 2,
+                "type": "Downtime",
+                "startedAt": "2026-02-15T00:00:00Z",
+                "resolvedAt": "2026-04-15T00:00:00Z",
+            },
         ]
 
         rows = report.compute_report(monitors, incidents, period_start, period_end)
@@ -91,6 +103,82 @@ class TestMonthlyUptimeReport(unittest.TestCase):
         self.assertEqual(row_b.downtime_seconds, 2678400)
         self.assertEqual(row_b.uptime_seconds, 0)
         self.assertEqual(row_b.uptime_percent, 0.0)
+
+    def test_compute_report_unresolved_incident_capped_at_period_end(self):
+        period_start = datetime(2026, 3, 1, 0, 0, tzinfo=timezone.utc)
+        period_end = datetime(2026, 4, 1, 0, 0, tzinfo=timezone.utc)
+        monitors = [{"id": 1, "name": "A", "url": "https://a.test", "status": "UP"}]
+        incidents = [
+            {
+                "monitorId": 1,
+                "type": "Downtime",
+                "startedAt": "2026-03-30T21:00:00Z",
+            }
+        ]
+
+        rows = report.compute_report(monitors, incidents, period_start, period_end)
+        self.assertEqual(len(rows), 1)
+        self.assertEqual(rows[0].downtime_seconds, 27 * 3600)
+
+    def test_compute_report_cross_month_overlap_only(self):
+        period_start = datetime(2026, 3, 1, 0, 0, tzinfo=timezone.utc)
+        period_end = datetime(2026, 4, 1, 0, 0, tzinfo=timezone.utc)
+        monitors = [{"id": 1, "name": "A", "url": "https://a.test", "status": "UP"}]
+        incidents = [
+            {
+                "monitorId": 1,
+                "type": "Downtime",
+                "startedAt": "2026-02-28T22:00:00Z",
+                "resolvedAt": "2026-03-01T03:00:00Z",
+            }
+        ]
+
+        rows = report.compute_report(monitors, incidents, period_start, period_end)
+        self.assertEqual(len(rows), 1)
+        self.assertEqual(rows[0].downtime_seconds, 3 * 3600)
+
+    def test_compute_report_ignores_outside_window_incident(self):
+        period_start = datetime(2026, 3, 1, 0, 0, tzinfo=timezone.utc)
+        period_end = datetime(2026, 4, 1, 0, 0, tzinfo=timezone.utc)
+        monitors = [{"id": 1, "name": "A", "url": "https://a.test", "status": "UP"}]
+        incidents = [
+            {
+                "monitorId": 1,
+                "type": "Downtime",
+                "startedAt": "2026-04-02T10:00:00Z",
+                "resolvedAt": "2026-04-02T11:00:00Z",
+            }
+        ]
+
+        rows = report.compute_report(monitors, incidents, period_start, period_end)
+        self.assertEqual(len(rows), 1)
+        self.assertEqual(rows[0].downtime_seconds, 0)
+
+    def test_compute_report_skips_invalid_monitor_id_in_monitors(self):
+        period_start = datetime(2026, 3, 1, 0, 0, tzinfo=timezone.utc)
+        period_end = datetime(2026, 4, 1, 0, 0, tzinfo=timezone.utc)
+        monitors = [
+            {"id": "", "name": "Invalid", "url": "https://invalid.test", "status": "UP"},
+            {"id": 2, "name": "B", "url": "https://b.test", "status": "UP"},
+        ]
+        incidents = []
+
+        rows = report.compute_report(monitors, incidents, period_start, period_end)
+        self.assertEqual([row.name for row in rows], ["B"])
+
+    def test_compute_report_skips_invalid_monitor_id_in_incidents(self):
+        period_start = datetime(2026, 3, 1, 0, 0, tzinfo=timezone.utc)
+        period_end = datetime(2026, 4, 1, 0, 0, tzinfo=timezone.utc)
+        monitors = [{"id": 1, "name": "A", "url": "https://a.test", "status": "UP"}]
+        incidents = [
+            {"monitorId": "", "type": "Downtime", "startedAt": "2026-03-10T10:00:00Z", "resolvedAt": "2026-03-10T11:00:00Z"},
+            {"monitorId": 1, "type": "Downtime", "startedAt": "2026-03-10T10:00:00Z", "resolvedAt": "2026-03-10T11:00:00Z"},
+        ]
+
+        rows = report.compute_report(monitors, incidents, period_start, period_end)
+        self.assertEqual(len(rows), 1)
+        self.assertEqual(rows[0].incident_count, 1)
+        self.assertEqual(rows[0].downtime_seconds, 3600)
 
     def test_render_outputs_include_columns(self):
         period_start = datetime(2026, 3, 1, 0, 0, tzinfo=timezone.utc)
