@@ -108,21 +108,6 @@ def connect_ssh(server_cfg: dict) -> tuple[paramiko.SSHClient | None, str | None
     port = server_cfg["port"]
     user = server_cfg["user"]
 
-    if key_path:
-        try:
-            client.connect(
-                hostname=host,
-                port=port,
-                username=user,
-                key_filename=key_path,
-                look_for_keys=False,
-                allow_agent=False,
-                timeout=15,
-            )
-            return client, None
-        except Exception as exc:  # noqa: BLE001
-            logging.warning("SSH key auth failed for %s@%s:%s (%s)", user, host, port, exc)
-
     try:
         client.connect(
             hostname=host,
