@@ -1,0 +1,40 @@
+name: Daily SSL Monitor
+
+on:
+  schedule:
+    - cron: "0 11 * * *"
+  workflow_dispatch:
+
+jobs:
+  ssl-monitor:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install dependencies
+        run: python -m pip install -r requirements.txt
+
+      - name: Run SSL monitor
+        env:
+          SERVERS: ${{ secrets.SERVERS }}
+          SERVER1_HOST: ${{ secrets.SERVER1_HOST }}
+          SERVER1_PORT: ${{ secrets.SERVER1_PORT }}
+          SERVER1_USER: ${{ secrets.SERVER1_USER }}
+          SERVER1_PASSWORD: ${{ secrets.SERVER1_PASSWORD }}
+          SERVER2_HOST: ${{ secrets.SERVER2_HOST }}
+          SERVER2_PORT: ${{ secrets.SERVER2_PORT }}
+          SERVER2_USER: ${{ secrets.SERVER2_USER }}
+          SERVER2_PASSWORD: ${{ secrets.SERVER2_PASSWORD }}
+          SMTP_HOST: ${{ secrets.OVH_SMTP_HOST }}
+          SMTP_PORT: ${{ secrets.OVH_SMTP_PORT }}
+          SMTP_USER: ${{ secrets.OVH_SMTP_USER }}
+          SMTP_PASSWORD: ${{ secrets.OVH_SMTP_PASS }}
+          EMAIL_FROM: ${{ secrets.SMTP_FROM }}
+          EMAIL_TO: ${{ secrets.REPORT_TO }}
+        run: python scripts/ssl_monitor.py

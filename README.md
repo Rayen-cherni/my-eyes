@@ -222,6 +222,77 @@ Report policy:
 - Uptime percentage is computed from `Downtime` incidents only.
 - `Slow Response` incidents are reported separately and excluded from downtime seconds.
 
+## Daily SSL Monitor (Secrets-Only)
+
+This repository includes a daily SSL monitoring workflow and script:
+
+- `.github/workflows/ssl_monitor.yml`
+- `scripts/ssl_monitor.py`
+
+Behavior:
+- Runs every day at `11:00 UTC`.
+- Supports manual execution via `workflow_dispatch`.
+- Connects to configured Linux servers over SSH.
+- Discovers domains from common Nginx/Apache config paths.
+- Checks live SSL expiration on port `443`.
+- Marks SSL status:
+  - `WARNING` when expiration is 7 days or less
+  - `OK` when expiration is greater than 7 days
+  - `UNKNOWN` when certificate data cannot be retrieved
+- Checks auto-renew indicators using:
+  - `/etc/letsencrypt/renewal/`
+  - `certbot certificates`
+  - `systemctl` status for `certbot.timer`
+
+Important:
+- `scripts/ssl_monitor.py` does not use `.env`.
+- Use exported shell environment variables for local runs.
+- Use GitHub Actions Secrets for CI runs.
+
+### Run Locally (No .env)
+
+Export variables in your shell, then run:
+
+```bash
+python scripts/ssl_monitor.py
+```
+
+Required variables:
+- `SERVERS` (example: `server1,server2`)
+- `SERVER1_HOST`, `SERVER1_PORT`, `SERVER1_USER`, `SERVER1_PASSWORD`, optional `SERVER1_KEY_PATH`
+- `SERVER2_HOST`, `SERVER2_PORT`, `SERVER2_USER`, `SERVER2_PASSWORD`, optional `SERVER2_KEY_PATH`
+- Repeat the same `SERVERX_*` pattern for additional servers listed in `SERVERS`
+- `SMTP_HOST`, `SMTP_PORT`, `SMTP_USER`, `SMTP_PASSWORD`
+- `EMAIL_FROM`, `EMAIL_TO` (comma-separated for multiple recipients)
+
+### GitHub Secrets Setup
+
+Create these repository secrets for `.github/workflows/ssl_monitor.yml`:
+
+- `SERVERS`
+- `SERVER1_HOST`
+- `SERVER1_PORT`
+- `SERVER1_USER`
+- `SERVER1_PASSWORD`
+- `SERVER1_KEY_PATH` (optional)
+- `SERVER2_HOST`
+- `SERVER2_PORT`
+- `SERVER2_USER`
+- `SERVER2_PASSWORD`
+- `SERVER2_KEY_PATH` (optional)
+- `SMTP_HOST`
+- `SMTP_PORT`
+- `SMTP_USER`
+- `SMTP_PASSWORD`
+- `EMAIL_FROM`
+- `EMAIL_TO`
+
+If you add more server aliases in `SERVERS`, add matching secrets using the same prefix pattern.
+
+### Customize Domain Discovery Paths
+
+If your server uses custom web config locations, edit `DISCOVERY_PATHS` in `scripts/ssl_monitor.py` to include your paths.
+
 ## Design Choices (Brief)
 
 - Adapter-based storage boundary: keeps backend-specific logic isolated to dedicated adapters.
