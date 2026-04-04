@@ -22,7 +22,6 @@ jobs:
 
       - name: Run SSL monitor
         env:
-          SERVERS: ${{ secrets.SERVERS }}
           SERVER1_HOST: ${{ secrets.SERVER1_HOST }}
           SERVER1_PORT: ${{ secrets.SERVER1_PORT }}
           SERVER1_USER: ${{ secrets.SERVER1_USER }}

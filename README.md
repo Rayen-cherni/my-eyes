@@ -258,10 +258,9 @@ python scripts/ssl_monitor.py
 ```
 
 Required variables:
-- `SERVERS` (example: `server1,server2`)
 - `SERVER1_HOST`, `SERVER1_PORT`, `SERVER1_USER`, `SERVER1_PASSWORD`, optional `SERVER1_KEY_PATH`
 - `SERVER2_HOST`, `SERVER2_PORT`, `SERVER2_USER`, `SERVER2_PASSWORD`, optional `SERVER2_KEY_PATH`
-- Repeat the same `SERVERX_*` pattern for additional servers listed in `SERVERS`
+- Repeat the same `SERVERX_*` pattern for additional servers (`SERVER3_*`, `SERVER4_*`, etc.)
 - `SMTP_HOST`, `SMTP_PORT`, `SMTP_USER`, `SMTP_PASSWORD`
 - `EMAIL_FROM`, `EMAIL_TO` (comma-separated for multiple recipients)
 
@@ -269,7 +268,6 @@ Required variables:
 
 Create these repository secrets for `.github/workflows/ssl_monitor.yml`:
 
-- `SERVERS`
 - `SERVER1_HOST`
 - `SERVER1_PORT`
 - `SERVER1_USER`
@@ -285,7 +283,7 @@ Create these repository secrets for `.github/workflows/ssl_monitor.yml`:
 - `EMAIL_FROM`
 - `EMAIL_TO`
 
-If you add more server aliases in `SERVERS`, add matching secrets using the same prefix pattern.
+If you add more servers, create matching `SERVERX_*` secrets. The script auto-detects any prefix that starts with `SERVER` and has a `_HOST` secret.
 
 ### Customize Domain Discovery Paths
 

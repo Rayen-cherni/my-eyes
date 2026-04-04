@@ -27,21 +27,36 @@ DISCOVERY_PATHS = [
 ]
 
 
+def _server_sort_key(alias: str) -> tuple[int, int | str]:
+    match = re.fullmatch(r"SERVER(\d+)", alias)
+    if match:
+        return (0, int(match.group(1)))
+    return (1, alias)
+
+
+def discover_server_aliases() -> list[str]:
+    """Auto-discover server prefixes from env keys like SERVER1_HOST."""
+    aliases: set[str] = set()
+    for env_name in os.environ:
+        if not env_name.endswith("_HOST"):
+            continue
+        prefix = env_name[:-5].strip().upper()
+        if re.fullmatch(r"SERVER[A-Z0-9_]*", prefix):
+            aliases.add(prefix)
+    return sorted(aliases, key=_server_sort_key)
+
+
 def load_config_from_env() -> tuple[list[dict], dict]:
     """Load server and SMTP configuration from environment variables only."""
-    servers_value = os.environ.get("SERVERS", "").strip()
-    if not servers_value:
-        raise ValueError("Missing required environment variable: SERVERS")
-
-    aliases = [item.strip() for item in servers_value.split(",") if item.strip()]
+    aliases = discover_server_aliases()
     if not aliases:
-        raise ValueError("SERVERS is empty after parsing")
+        raise ValueError("No SERVER*_HOST variables found (example: SERVER1_HOST)")
 
     servers: list[dict] = []
     config_errors: list[str] = []
 
     for alias in aliases:
-        key_prefix = re.sub(r"[^A-Za-z0-9]", "_", alias).upper()
+        key_prefix = alias
         host = os.environ.get(f"{key_prefix}_HOST", "").strip()
         port_raw = os.environ.get(f"{key_prefix}_PORT", "").strip() or "22"
         user = os.environ.get(f"{key_prefix}_USER", "").strip()
