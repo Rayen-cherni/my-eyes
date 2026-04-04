@@ -222,15 +222,15 @@ Report policy:
 - Uptime percentage is computed from `Downtime` incidents only.
 - `Slow Response` incidents are reported separately and excluded from downtime seconds.
 
-## Daily SSL Monitor (Secrets-Only)
+## Monthly SSL Monitor (Secrets-Only)
 
-This repository includes a daily SSL monitoring workflow and script:
+This repository includes a monthly SSL monitoring workflow and script:
 
 - `.github/workflows/ssl_monitor.yml`
 - `scripts/ssl_monitor.py`
 
 Behavior:
-- Runs every day at `11:00 UTC`.
+- Runs on the first day of each month at `11:00 UTC`.
 - Supports manual execution via `workflow_dispatch`.
 - Connects to configured Linux servers over SSH.
 - Discovers domains from common Nginx/Apache config paths.

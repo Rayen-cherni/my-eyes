@@ -1,8 +1,8 @@
-name: Daily SSL Monitor
+name: Monthly SSL Monitor
 
 on:
   schedule:
-    - cron: "0 11 * * *"
+    - cron: "0 11 1 * *"
   workflow_dispatch:
 
 jobs:
@@ -31,6 +31,18 @@ jobs:
           SERVER2_PORT: ${{ secrets.SERVER2_PORT }}
           SERVER2_USER: ${{ secrets.SERVER2_USER }}
           SERVER2_PASSWORD: ${{ secrets.SERVER2_PASSWORD }}
+          SERVER3_HOST: ${{ secrets.SERVER3_HOST }}
+          SERVER3_PORT: ${{ secrets.SERVER3_PORT }}
+          SERVER3_USER: ${{ secrets.SERVER3_USER }}
+          SERVER3_PASSWORD: ${{ secrets.SERVER3_PASSWORD }}
+          SERVER4_HOST: ${{ secrets.SERVER4_HOST }}
+          SERVER4_PORT: ${{ secrets.SERVER4_PORT }}
+          SERVER4_USER: ${{ secrets.SERVER4_USER }}
+          SERVER4_PASSWORD: ${{ secrets.SERVER4_PASSWORD }}
+          SERVER5_HOST: ${{ secrets.SERVER5_HOST }}
+          SERVER5_PORT: ${{ secrets.SERVER5_PORT }}
+          SERVER5_USER: ${{ secrets.SERVER5_USER }}
+          SERVER5_PASSWORD: ${{ secrets.SERVER5_PASSWORD }}
           SMTP_HOST: ${{ secrets.OVH_SMTP_HOST }}
           SMTP_PORT: ${{ secrets.OVH_SMTP_PORT }}
           SMTP_USER: ${{ secrets.OVH_SMTP_USER }}

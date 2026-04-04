@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Daily SSL monitor that checks domains discovered on remote Linux servers."""
+"""Monthly SSL monitor that checks domains discovered on remote Linux servers."""
 
 from __future__ import annotations
 
@@ -288,7 +288,7 @@ def build_report_text_summary(server_reports: list[dict]) -> str:
     """Build short plain-text fallback content for multipart email."""
     generated = datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M:%S UTC")
     lines: list[str] = []
-    lines.append("Daily SSL Monitoring Report")
+    lines.append("Monthly SSL Monitoring Report")
     lines.append(f"Generated at: {generated}")
     lines.append("")
 
@@ -340,7 +340,7 @@ def build_report_html(server_reports: list[dict]) -> str:
         ".status-unknown { color: #991b1b; font-weight: 700; }",
         ".summary { margin-top: 20px; padding: 10px; background: #f9fafb; border: 1px solid #e5e7eb; }",
         "</style></head><body>",
-        "<h2>Daily SSL Monitoring Report</h2>",
+        "<h2>Monthly SSL Monitoring Report</h2>",
         f"<div class='meta'>Generated at: {escape(generated)}</div>",
     ]
 
@@ -402,9 +402,9 @@ def build_report_html(server_reports: list[dict]) -> str:
 
 
 def send_email(report_text: str, report_html: str, smtp_cfg: dict) -> None:
-    """Send the daily report email via SMTP + STARTTLS."""
+    """Send the monthly report email via SMTP + STARTTLS."""
     message = EmailMessage()
-    message["Subject"] = "Daily SSL Monitoring Report"
+    message["Subject"] = "Monthly SSL Monitoring Report"
     message["From"] = smtp_cfg["email_from"]
     message["To"] = ", ".join(smtp_cfg["email_to"])
     message.set_content(report_text)
