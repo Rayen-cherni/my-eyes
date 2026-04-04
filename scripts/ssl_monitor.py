@@ -244,6 +244,7 @@ def check_auto_renew(ssh_client: paramiko.SSHClient) -> tuple[str, str]:
     """Check simple Certbot/Let's Encrypt auto-renew indicators."""
     evidence_yes: list[str] = []
     evidence_no: list[str] = []
+    has_certbot_evidence = False
 
     _, dir_out, _ = run_remote_command(
         ssh_client,
@@ -251,6 +252,7 @@ def check_auto_renew(ssh_client: paramiko.SSHClient) -> tuple[str, str]:
     )
     if "YES" in dir_out:
         evidence_yes.append("/etc/letsencrypt/renewal exists")
+        has_certbot_evidence = True
     else:
         evidence_no.append("/etc/letsencrypt/renewal missing")
 
@@ -265,32 +267,56 @@ def check_auto_renew(ssh_client: paramiko.SSHClient) -> tuple[str, str]:
             token in certbot_out for token in ["Certificate Name:", "VALID:", "Expiry Date:"]
         ):
             evidence_yes.append("certbot certificates returned certificate data")
+            has_certbot_evidence = True
         elif certbot_code == 0 and certbot_out.strip():
             evidence_yes.append("certbot certificates returned output")
+            has_certbot_evidence = True
         elif certbot_err.strip():
             return "UNKNOWN", "certbot installed but certificate query was inconclusive"
     else:
         evidence_no.append("certbot command not found")
 
-    timer_code, timer_out, _ = run_remote_command(
-        ssh_client,
-        "systemctl is-enabled certbot.timer 2>/dev/null || true",
-    )
-    active_code, active_out, _ = run_remote_command(
-        ssh_client,
-        "systemctl is-active certbot.timer 2>/dev/null || true",
-    )
+    timer_names = ["certbot.timer", "snap.certbot.renew.timer"]
+    timer_partial = False
+    timer_absent_count = 0
+    has_active_timer = False
 
-    enabled_text = timer_out.strip().lower()
-    active_text = active_out.strip().lower()
-    if enabled_text == "enabled" and active_text == "active":
-        evidence_yes.append("certbot.timer is enabled and active")
-    elif timer_code == 0 or active_code == 0:
-        return "UNKNOWN", "certbot.timer status is partially available"
-    elif enabled_text in {"disabled", "not-found", "masked", "inactive", ""}:
-        evidence_no.append("certbot.timer is not enabled/active")
+    for timer_name in timer_names:
+        timer_code, timer_out, _ = run_remote_command(
+            ssh_client,
+            f"systemctl is-enabled {timer_name} 2>/dev/null || true",
+        )
+        active_code, active_out, _ = run_remote_command(
+            ssh_client,
+            f"systemctl is-active {timer_name} 2>/dev/null || true",
+        )
 
-    if evidence_yes:
+        enabled_text = timer_out.strip().lower()
+        active_text = active_out.strip().lower()
+        if enabled_text == "enabled" and active_text == "active":
+            evidence_yes.append(f"{timer_name} is enabled and active")
+            has_active_timer = True
+            continue
+
+        absent_states = {"disabled", "not-found", "masked", "inactive", ""}
+        if enabled_text in absent_states and active_text in absent_states:
+            timer_absent_count += 1
+            continue
+
+        if timer_code == 0 or active_code == 0:
+            timer_partial = True
+            continue
+
+        if enabled_text not in absent_states or active_text not in absent_states:
+            timer_partial = True
+
+    if timer_partial and not has_active_timer:
+        return "UNKNOWN", "certbot timer status is partially available"
+
+    if timer_absent_count == len(timer_names):
+        evidence_no.append("no supported certbot timer is enabled/active")
+
+    if has_active_timer and has_certbot_evidence:
         return "YES", "; ".join(evidence_yes)
 
     if evidence_no and len(evidence_no) >= 2:
