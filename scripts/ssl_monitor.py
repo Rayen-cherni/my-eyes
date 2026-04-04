@@ -9,6 +9,7 @@ import re
 import smtplib
 import socket
 import ssl
+from html import escape
 from datetime import datetime, timezone
 from email.message import EmailMessage
 
@@ -283,8 +284,8 @@ def check_auto_renew(ssh_client: paramiko.SSHClient) -> tuple[str, str]:
     return "UNKNOWN", "auto-renew indicators are inconclusive"
 
 
-def build_report(server_reports: list[dict]) -> str:
-    """Build a plain text report with per-server SSL information."""
+def build_report_text_summary(server_reports: list[dict]) -> str:
+    """Build short plain-text fallback content for multipart email."""
     generated = datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M:%S UTC")
     lines: list[str] = []
     lines.append("Daily SSL Monitoring Report")
@@ -296,11 +297,7 @@ def build_report(server_reports: list[dict]) -> str:
     total_unknown = 0
 
     for report in server_reports:
-        lines.append(f"Server: {report['alias']} ({report['host']})")
-        lines.append(f"Server note: {report['server_note']}")
-        lines.append("domain | expiration date | days left | status | auto-renew | note")
-        lines.append("-" * 90)
-
+        lines.append(f"- {report['alias']} ({report['host']}): {len(report['rows'])} domain row(s)")
         for row in report["rows"]:
             status = row.get("status", "UNKNOWN")
             if status == "OK":
@@ -310,29 +307,108 @@ def build_report(server_reports: list[dict]) -> str:
             else:
                 total_unknown += 1
 
-            line = (
-                f"{row.get('domain', '-')} | {row.get('expiration_date', '-')} | "
-                f"{row.get('days_left', '-')} | {status} | "
-                f"{row.get('auto_renew', 'UNKNOWN')} | {row.get('note', '-') }"
-            )
-            lines.append(line)
-
-        lines.append("")
-
     lines.append("Summary")
     lines.append(f"OK: {total_ok}")
     lines.append(f"WARNING: {total_warning}")
     lines.append(f"UNKNOWN: {total_unknown}")
+    lines.append("")
+    lines.append("This email includes an HTML table view in compatible clients.")
     return "\n".join(lines)
 
 
-def send_email(report_text: str, smtp_cfg: dict) -> None:
+def build_report_html(server_reports: list[dict]) -> str:
+    """Build an HTML report with per-server tables (no row-level note column)."""
+    generated = datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M:%S UTC")
+    total_ok = 0
+    total_warning = 0
+    total_unknown = 0
+
+    parts: list[str] = [
+        "<!doctype html>",
+        "<html><head><meta charset='utf-8'>",
+        "<style>",
+        "body { font-family: Arial, sans-serif; color: #1f2937; line-height: 1.4; }",
+        "h2 { margin-bottom: 4px; }",
+        ".meta { color: #4b5563; margin-bottom: 18px; }",
+        ".server-title { margin: 22px 0 6px; font-weight: 700; }",
+        ".server-note { margin: 0 0 10px; color: #374151; font-size: 14px; }",
+        "table { border-collapse: collapse; width: 100%; margin-bottom: 16px; }",
+        "th, td { border: 1px solid #d1d5db; padding: 8px; text-align: left; font-size: 14px; }",
+        "th { background: #f3f4f6; }",
+        ".status-ok { color: #166534; font-weight: 700; }",
+        ".status-warning { color: #92400e; font-weight: 700; }",
+        ".status-unknown { color: #991b1b; font-weight: 700; }",
+        ".summary { margin-top: 20px; padding: 10px; background: #f9fafb; border: 1px solid #e5e7eb; }",
+        "</style></head><body>",
+        "<h2>Daily SSL Monitoring Report</h2>",
+        f"<div class='meta'>Generated at: {escape(generated)}</div>",
+    ]
+
+    for report in server_reports:
+        alias = escape(str(report.get("alias", "-")))
+        host = escape(str(report.get("host", "-")))
+        server_note = escape(str(report.get("server_note", "-")))
+        parts.append(f"<div class='server-title'>Server: {alias} ({host})</div>")
+        parts.append(f"<div class='server-note'>Server note: {server_note}</div>")
+        parts.append("<table>")
+        parts.append(
+            "<thead><tr>"
+            "<th>domain</th>"
+            "<th>expiration date</th>"
+            "<th>days left</th>"
+            "<th>status</th>"
+            "<th>auto-renew</th>"
+            "</tr></thead><tbody>"
+        )
+
+        for row in report.get("rows", []):
+            status = str(row.get("status", "UNKNOWN")).upper()
+            if status == "OK":
+                total_ok += 1
+                status_class = "status-ok"
+            elif status == "WARNING":
+                total_warning += 1
+                status_class = "status-warning"
+            else:
+                total_unknown += 1
+                status_class = "status-unknown"
+
+            domain = escape(str(row.get("domain", "-")))
+            expiration_date = escape(str(row.get("expiration_date", "-")))
+            days_left = escape(str(row.get("days_left", "-")))
+            auto_renew = escape(str(row.get("auto_renew", "UNKNOWN")))
+            parts.append(
+                "<tr>"
+                f"<td>{domain}</td>"
+                f"<td>{expiration_date}</td>"
+                f"<td>{days_left}</td>"
+                f"<td class='{status_class}'>{escape(status)}</td>"
+                f"<td>{auto_renew}</td>"
+                "</tr>"
+            )
+
+        parts.append("</tbody></table>")
+
+    parts.append(
+        "<div class='summary'>"
+        "<strong>Summary</strong><br>"
+        f"OK: {total_ok}<br>"
+        f"WARNING: {total_warning}<br>"
+        f"UNKNOWN: {total_unknown}"
+        "</div>"
+    )
+    parts.append("</body></html>")
+    return "".join(parts)
+
+
+def send_email(report_text: str, report_html: str, smtp_cfg: dict) -> None:
     """Send the daily report email via SMTP + STARTTLS."""
     message = EmailMessage()
     message["Subject"] = "Daily SSL Monitoring Report"
     message["From"] = smtp_cfg["email_from"]
     message["To"] = ", ".join(smtp_cfg["email_to"])
     message.set_content(report_text)
+    message.add_alternative(report_html, subtype="html")
 
     context = ssl.create_default_context()
     with smtplib.SMTP(smtp_cfg["host"], smtp_cfg["port"], timeout=30) as server:
@@ -429,10 +505,11 @@ def main() -> int:
 
         all_server_reports.append(server_result)
 
-    report = build_report(all_server_reports)
+    report_text = build_report_text_summary(all_server_reports)
+    report_html = build_report_html(all_server_reports)
 
     try:
-        send_email(report, smtp_cfg)
+        send_email(report_text, report_html, smtp_cfg)
         logging.info("SSL report sent successfully")
     except Exception as exc:  # noqa: BLE001
         logging.error("Failed to send report email: %s", exc)
