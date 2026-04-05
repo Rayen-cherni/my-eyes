@@ -408,10 +408,10 @@ def send_report_email(
 
 def main() -> int:
     token = _require_env("UPTIMEROBOT_API_TOKEN")
-    smtp_host = _require_env("OVH_SMTP_HOST")
-    smtp_port = int(_require_env("OVH_SMTP_PORT"))
-    smtp_user = _require_env("OVH_SMTP_USER")
-    smtp_pass = _require_env("OVH_SMTP_PASS")
+    smtp_host = _require_env("SMTP_HOST")
+    smtp_port = int(_require_env("SMTP_PORT"))
+    smtp_user = _require_env("SMTP_USER")
+    smtp_pass = _require_env("SMTP_PASSWORD")
     sender = _require_env("SMTP_FROM")
     recipients = [part.strip() for part in _require_env("REPORT_TO").split(",") if part.strip()]
 

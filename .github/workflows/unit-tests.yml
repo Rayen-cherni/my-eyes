@@ -22,4 +22,4 @@ jobs:
         run: python -m pip install -r requirements.txt
 
       - name: Run unit tests
-        run: PYTHONPATH=src python -m unittest discover -s tests -v
+        run: python -m unittest tests.test_ssl_monitor tests.test_monthly_uptime_report -v

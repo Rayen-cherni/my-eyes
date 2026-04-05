@@ -42,10 +42,10 @@ jobs:
           SERVER5_PORT: ${{ secrets.SERVER5_PORT }}
           SERVER5_USER: ${{ secrets.SERVER5_USER }}
           SERVER5_PASSWORD: ${{ secrets.SERVER5_PASSWORD }}
-          SMTP_HOST: ${{ secrets.OVH_SMTP_HOST }}
-          SMTP_PORT: ${{ secrets.OVH_SMTP_PORT }}
-          SMTP_USER: ${{ secrets.OVH_SMTP_USER }}
-          SMTP_PASSWORD: ${{ secrets.OVH_SMTP_PASS }}
+          SMTP_HOST: ${{ secrets.SMTP_HOST }}
+          SMTP_PORT: ${{ secrets.SMTP_PORT }}
+          SMTP_USER: ${{ secrets.SMTP_USER }}
+          SMTP_PASSWORD: ${{ secrets.SMTP_PASSWORD }}
           EMAIL_FROM: ${{ secrets.SMTP_FROM }}
           EMAIL_TO: ${{ secrets.REPORT_TO }}
         run: python scripts/ssl_monitor.py

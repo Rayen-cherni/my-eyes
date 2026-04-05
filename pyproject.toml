@@ -3,17 +3,8 @@ requires = ["setuptools>=68", "wheel"]
 build-backend = "setuptools.build_meta"
 
 [project]
-name = "uptime-monitor"
+name = "monitoring-utilities"
 version = "0.1.0"
-description = "Server uptime/availability monitor with PostgreSQL-backed history"
+description = "Utility scripts for UptimeRobot reporting and SSL certificate monitoring"
 requires-python = ">=3.11"
-dependencies = ["psycopg[binary]>=3.2"]
-
-[tool.setuptools]
-package-dir = {"" = "src"}
-
-[tool.setuptools.packages.find]
-where = ["src"]
-
-[project.scripts]
-uptime-monitor = "uptime_monitor.cli:main"
+dependencies = ["paramiko>=3.4"]

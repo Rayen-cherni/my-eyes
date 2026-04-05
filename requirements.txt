@@ -1,7 +1,2 @@
-# Core dependency needed for PostgreSQL support.
-psycopg[binary]>=3.2
+# Dependency required by scripts/ssl_monitor.py
 paramiko>=3.4
-
-# Optional future extras:
-# PyYAML>=6.0
-# PyMySQL>=1.1
