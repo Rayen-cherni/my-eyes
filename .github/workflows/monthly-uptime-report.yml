@@ -30,6 +30,6 @@ jobs:
           SMTP_PORT: ${{ secrets.SMTP_PORT }}
           SMTP_USER: ${{ secrets.SMTP_USER }}
           SMTP_PASSWORD: ${{ secrets.SMTP_PASSWORD }}
-          SMTP_FROM: ${{ secrets.SMTP_FROM }}
-          REPORT_TO: ${{ secrets.REPORT_TO }}
+          SMTP_FROM: ${{ secrets.EMAIL_FROM }}
+          REPORT_TO: ${{ secrets.EMAIL_TO }}
         run: python scripts/monthly_uptime_report.py

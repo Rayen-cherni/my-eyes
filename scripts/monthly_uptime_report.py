@@ -412,8 +412,8 @@ def main() -> int:
     smtp_port = int(_require_env("SMTP_PORT"))
     smtp_user = _require_env("SMTP_USER")
     smtp_pass = _require_env("SMTP_PASSWORD")
-    sender = _require_env("SMTP_FROM")
-    recipients = [part.strip() for part in _require_env("REPORT_TO").split(",") if part.strip()]
+    sender = _require_env("EMAIL_FROM")
+    recipients = [part.strip() for part in _require_env("EMAIL_TO").split(",") if part.strip()]
 
     api_base_url = os.getenv("UPTIMEROBOT_API_BASE", DEFAULT_API_BASE).strip() or DEFAULT_API_BASE
     timeout = int(os.getenv("UPTIMEROBOT_TIMEOUT_SECONDS", str(DEFAULT_TIMEOUT_SECONDS)))
