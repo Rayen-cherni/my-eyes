@@ -9,6 +9,7 @@ venv/
 
 # Environment/secrets
 .env
+config/ssh_folder_downloader.json
 
 # Logs
 *.log

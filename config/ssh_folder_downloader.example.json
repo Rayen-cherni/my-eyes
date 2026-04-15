@@ -1,0 +1,28 @@
+{
+  "defaults": {
+    "port": 22,
+    "timeout_seconds": 15,
+    "recursive": true,
+    "skip_existing": true
+  },
+  "servers": [
+    {
+      "name": "backup-app-1",
+      "host": "203.0.113.10",
+      "username": "deploy",
+      "password": "change-me",
+      "remote_folder": "/var/www/app/storage/exports",
+      "local_folder": "./downloads/app-1"
+    },
+    {
+      "name": "backup-app-2",
+      "host": "203.0.113.20",
+      "username": "deploy",
+      "private_key_path": "/home/user/.ssh/id_rsa",
+      "private_key_passphrase": "optional-passphrase",
+      "remote_folder": "/var/backups/app",
+      "local_folder": "./downloads/app-2",
+      "skip_existing": false
+    }
+  ]
+}

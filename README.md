@@ -5,6 +5,7 @@ It now focuses on standalone automation utilities:
 
 - `scripts/monthly_uptime_report.py`: Generates a previous-month uptime report from UptimeRobot API data and sends it by email.
 - `scripts/ssl_monitor.py`: Connects to Linux servers over SSH, checks SSL certificate expiration and auto-renew indicators, then sends an email report.
+- `scripts/ssh_folder_downloader.py`: Reads JSON-configured SSH targets and downloads remote files with per-file progress output.
 
 ## What Changed
 
@@ -22,10 +23,12 @@ It now focuses on standalone automation utilities:
 ├── pyproject.toml
 ├── scripts/
 │   ├── monthly_uptime_report.py
+│   ├── ssh_folder_downloader.py
 │   ├── ssl_monitor.py
 │   └── __init__.py
 ├── tests/
 │   ├── test_monthly_uptime_report.py
+│   ├── test_ssh_folder_downloader.py
 │   └── test_ssl_monitor.py
 └── .github/workflows/
     ├── monthly-uptime-report.yml
@@ -101,6 +104,28 @@ Behavior:
 - Classifies SSL state as `OK`, `WARNING`, or `UNKNOWN`.
 - Checks certbot auto-renew indicators and includes them in the report.
 
+### SSH Folder Downloader
+
+Run manually:
+
+```bash
+python3 scripts/ssh_folder_downloader.py --config config/ssh_folder_downloader.json
+```
+
+Example config template:
+
+```bash
+config/ssh_folder_downloader.example.json
+```
+
+Behavior:
+
+- Loads server definitions from JSON (`servers` + optional `defaults`).
+- Connects over SSH/SFTP using password or private key auth.
+- Recursively lists remote files and preserves folder structure locally.
+- Shows per-file download progress bars (size, speed, elapsed time).
+- Prints final execution summary with downloaded/skipped/failed counts.
+
 ## GitHub Workflows
 
 - `.github/workflows/monthly-uptime-report.yml`
@@ -115,7 +140,7 @@ Behavior:
 Run all remaining tests:
 
 ```bash
-python3 -m unittest tests.test_ssl_monitor tests.test_monthly_uptime_report -v
+python3 -m unittest tests.test_ssl_monitor tests.test_monthly_uptime_report tests.test_ssh_folder_downloader -v
 ```
 
 ## Deprecation Note
